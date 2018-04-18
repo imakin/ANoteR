@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ANoteR",
-    "description": "This project is really great.",
+    "description": "Open source secure Note with no data spying",
     "slug": "ANoteR",
     "privacy": "public",
     "sdkVersion": "26.0.0",
@@ -22,6 +22,9 @@
     ],
     "ios": {
       "supportsTablet": true
+    },
+    "android": {
+      "package": "com.izzulmakin.anoter"
     }
   }
 }

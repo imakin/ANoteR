@@ -27,10 +27,9 @@ function passwordToKey(password) {
  */
 function makePadd(length) {
   const padding_char = ' ';
-  if (length<16) {
-    return padding_char.repeat(16-length);
-  }
-  return padding_char.repeat(length%16);
+  return padding_char.repeat(
+    ((length-1)|15)+1-length // closest upper multiplier of 16
+  );
 }
 
 /**
@@ -40,6 +39,7 @@ function makePadd(length) {
  * @return hexstring of encrypted text
  */
 function encrypt(text, password) {
+  console_log("to encrypt: ["+text+makePadd(text.length)+"]");
   var aesCbc = new aesjs.ModeOfOperation.cbc(passwordToKey(password), iv);
   var encryptedBytes = aesCbc.encrypt( 
     aesjs.utils.utf8.toBytes( // convert to bytes
@@ -70,6 +70,10 @@ const passwordViewHeight = windowH/3;
 const windowHmB = windowH - passwordViewHeight-20;
 
 
+const allow_log = false;
+function console_log(x) {
+  if (allow_log) console.log(x);
+}
 
 
 
@@ -104,13 +108,13 @@ class RoomPassword extends React.Component {
       _input.push(buttonId);
       
       if (_input.length==props.passwordLength) {
-        console.log("password set: "+_input);
+        console_log("password set: "+_input);
         props.setPassword(_input);
       }
       
       return {input: _input};
     });
-    console.log(this.state.input);
+    console_log(this.state.input);
   }
 
   render() {
@@ -175,20 +179,20 @@ class RoomNote extends React.Component {
     var decrypted_data = this.props.encrypted_data;
 
       // check if password is correct
-      console.log(this.props.encrypted_aaa);
+      console_log(this.props.encrypted_aaa);
       decrypted_aaa =  decrypt(this.props.encrypted_aaa, this.props.password);
-      console.log("decrypted aaa is : "+decrypted_aaa);
+      console_log("decrypted aaa is : "+decrypted_aaa);
       if (decrypted_aaa=="aaa") {
         // this.setState({passwordCorrect: true});
         // password correct, proceed to decrypting
-        console.log("encrypted data: "+this.props.encrypted_data);
+        console_log("encrypted data: "+this.props.encrypted_data);
         var decrypted = decrypt(this.props.encrypted_data, this.props.password);
-        console.log("decrypted data: "+decrypted);
+        console_log("decrypted data: "+decrypted);
         this.setState({decrypted_data:decrypted});
       }
       else {
         this.props.onWrongPassword();
-        console.log("wrong password: "+this.props.password);
+        console_log("wrong password: "+this.props.password);
       }
   };
 
@@ -203,8 +207,10 @@ class RoomNote extends React.Component {
             this.props.saveMethod(this.state.decrypted_data);
             this.setState({edited: false})
           }}
+          style={styles.roomNoteSaveTouchable}
         >
-          <Text>Save</Text>
+          <Text
+          style={styles.roomNoteSaveTouchableText}>Save</Text>
         </TouchableOpacity>
       </View>);
     }
@@ -319,7 +325,7 @@ export default class App extends React.Component {
   };
 
   dbCreateTable() {
-    console.log("create table called");
+    console_log("create table called");
     db.transaction(tx => {
       tx.executeSql(
         'create table if not exists data (id integer primary key not null, encrypted_aaa string, encrypted_data string);',
@@ -340,7 +346,7 @@ export default class App extends React.Component {
 
 
   dbFetch(tx) {
-    console.log("dbFetch is called");
+    console_log("dbFetch is called");
     var proc = (tx) => {
       tx.executeSql(
         `select * from data where id = ?`,
@@ -348,10 +354,10 @@ export default class App extends React.Component {
         (tx, resultSet) => {
           if (resultSet["rows"]["length"]>0) {
             this.setState({data: resultSet["rows"]["_array"][0]});
-            console.log("ada");
+            console_log("ada");
           }
           else {
-            console.log("data kosong, bikin baru");
+            console_log("data kosong, bikin baru");
             this.setState({
               password: null,
               data: null
@@ -359,7 +365,7 @@ export default class App extends React.Component {
           }
         },
         (tx, err) => {
-          console.log(err);
+          console_log(err);
         }
       );
     };
@@ -391,15 +397,19 @@ export default class App extends React.Component {
 
   };
   dbSaveData(dataString) {
+    console_log("to encrypt: "+dataString);
+    var encrypted_hexstring = encrypt(dataString, this.state.password);
+    console_log("encrypted hexstring to save: "+encrypted_hexstring);
+
     db.transaction((tx) => {
       tx.executeSql(
         'UPDATE data SET encrypted_data = ? where id = ?;',
-        [dataString, 1],
+        [encrypted_hexstring, 1],
         (tx,rs) => {
-          console.log("saved");
+          console_log("saved");
         },
         (tx, err) => {
-          console.log("saving error: "+err)
+          console_log("saving error: "+err)
         }
       )
     }
@@ -445,10 +455,19 @@ const styles = StyleSheet.create({
     width: windowW
   },
   roomNoteText: {
-    flex:10
+    flex:5
   },
   roomNoteSave: {
     flex: 1
+  },
+  roomNoteSaveTouchable: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#8BC34A',
+    height: 40,
+  },
+  roomNoteSaveTouchableText: {
+    color: '#ffffff'
   },
   fadeViewContainer: {
     ...StyleSheet.absoluteFillObject,
