@@ -452,10 +452,13 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     paddingTop: Expo.Constants.statusBarHeight,
     height: windowH-Expo.Constants.statusBarHeight,
-    width: windowW
+    width: windowW,
+    backgroundColor: 'rgb(30,30,30)',
+    color: 'rgb(152,220,254)',
   },
   roomNoteText: {
-    flex:5
+    flex:5,
+    padding: 5,
   },
   roomNoteSave: {
     flex: 1
