@@ -1,8 +1,12 @@
-import Expo, { SQLite } from 'expo';
+/**
+ * Izzulmakin
+ * April 2018
+ */
 import React, { PureComponent, Children } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, Button, Dimensions,
   KeyboardAvoidingView, Animated,
+  AsyncStorage, 
 } from 'react-native';
 
 import { Buffer } from 'buffer';
@@ -61,18 +65,56 @@ function decrypt(hexstringEncryptedData, password) {
   return aesjs.utils.utf8.fromBytes(decryptedBytes).trim();//from Bytes to string, trim trailing spaces
 }
 
-const db = SQLite.openDatabase('db.db');
-
 
 const windowW = Dimensions.get('window').width;
 const windowH = Dimensions.get('window').height;
 const passwordViewHeight = windowH/3;
 const windowHmB = windowH - passwordViewHeight-20;
+const topBarHeight = 30;
 
+const db ={
+  "encrypted_aaa": "@ANoteR:encrypted_aaa",
+  "encrypted_data": "@ANoteR:encrypted_data",
+};
 
-const allow_log = false;
+const allow_log = true;
 function console_log(x) {
   if (allow_log) console.log(x);
+}
+
+
+
+
+
+class FadeInView extends React.Component {
+  state = {
+    fadeAnim: new Animated.Value(0),  // Initial value for opacity: 0
+  }
+
+  componentDidMount() {
+    let ftime = this.props.fadeInTime || 2000;
+    Animated.timing(                  // Animate over time
+      this.state.fadeAnim,            // The animated value to drive
+      {
+        toValue: 1,                   // Animate to opacity: 1 (opaque)
+        duration: ftime,              // Make it take a while
+      }
+    ).start();                        // Starts the animation
+  }
+
+  render() {
+    let { fadeAnim } = this.state;
+    return (
+      <Animated.View                 // Special animatable View
+        style={{
+          ...this.props.style,
+          opacity: fadeAnim,         // Bind opacity to animated value
+        }}
+      >
+        {this.props.children}
+      </Animated.View>
+    );
+  }
 }
 
 
@@ -109,7 +151,7 @@ class RoomPassword extends React.Component {
       
       if (_input.length==props.passwordLength) {
         console_log("password set: "+_input);
-        props.setPassword(_input);
+        props.setPassword(_input);  // !! set password is here
       }
       
       return {input: _input};
@@ -146,13 +188,24 @@ class RoomPassword extends React.Component {
     if (this.props.isNew) {
       textInfo = "Create new password (length: "+this.props.passwordLength+" digit)";
     }
+    let textInfoView = (<Text style={{color: 'rgb(210,230,80)'}}>
+      {textInfo} {this.props.additionalMessage}
+    </Text>);
 
     return (
 
         <View style={styles.roomPassword}>
-          <Text style={{alignItems: 'center',width:windowW}} >
-          {textInfo} {this.props.additionalMessage}
-          </Text>
+          <FadeInView
+            style={{
+              alignItems: 'center',
+              width: windowW,
+              justifyContent: 'center',
+              paddingTop: 20,
+              paddingBottom: 20,
+              backgroundColor: 'rgb(23, 91, 114)'}}
+            children={textInfoView}
+            fadeInTime={400}
+            />
           {buttons}
         </View>
     );
@@ -216,7 +269,7 @@ class RoomNote extends React.Component {
     }
 
     return (
-      <KeyboardAvoidingView style={styles.roomNote} behavior="padding">
+      <KeyboardAvoidingView style={styles.roomNote} >
         <TextInput
           style={styles.roomNoteText}
           editable={true}
@@ -229,6 +282,28 @@ class RoomNote extends React.Component {
     );
   };
 
+};
+
+class RoomPasswordSetNewData extends React.Component {
+  /**
+   * just make newDB called once 
+   * this.props.password
+   * this.props.createNewData : method 
+   */
+  componentDidMount() {
+    this.props.createNewData();
+  }
+
+  render() {
+    return (
+      <View
+      style={{
+        flexDirection: 'row',
+      }}>
+        <Text>Password set {this.props.password}</Text>
+      </View>
+    );
+  };
 };
 
 
@@ -291,17 +366,14 @@ export default class App extends React.Component {
     }
     else if (this.state.password!==null && this.state.data==null) {
       //password set, use it to create data
-      this.dbNewData();
       return (
-        <View
-        style={{
-          flexDirection: 'row',
-        }}>
-          <Text>Password set {this.state.password}</Text>
-        </View>
+        <RoomPasswordSetNewData
+         password={this.state.password}
+         createNewData={() => this.dbNewData()}
+        />
       );
     }
-    else {
+    else { //password is null
       //no password set and no data, means db is empty, create password to generate data in db
       if (this.state.data==null) {
         return (
@@ -326,95 +398,65 @@ export default class App extends React.Component {
 
   dbCreateTable() {
     console_log("create table called");
-    db.transaction(tx => {
-      tx.executeSql(
-        'create table if not exists data (id integer primary key not null, encrypted_aaa string, encrypted_data string);',
-        null,
-        (tx,rs) => {
-          this.dbFetch(tx);
-        }
-      );
-    });
+    this.dbFetch();
   }
 
   dbEmpty() {
     //dbempty called
-    db.transaction((tx) => {
-      tx.executeSql("delete from data where 1;")
-    })
+    AsyncStorage.setItem(db.encrypted_aaa, null);
   };
 
 
-  dbFetch(tx) {
+  dbFetch() {
     console_log("dbFetch is called");
-    var proc = (tx) => {
-      tx.executeSql(
-        `select * from data where id = ?`,
-        [1],
-        (tx, resultSet) => {
-          if (resultSet["rows"]["length"]>0) {
-            this.setState({data: resultSet["rows"]["_array"][0]});
-            console_log("ada");
+    AsyncStorage.getItem(db.encrypted_aaa, (error, encrypted_aaa)=> {
+      if (encrypted_aaa!=null) {
+        console_log("data loaded, encrypted_aaa: "+encrypted_aaa);
+        AsyncStorage.getItem(db.encrypted_data, (error, encrypted_data) => {
+          if (encrypted_data!=null) {
+            console_log("data loaded, encrypted_data: "+encrypted_data);
+            this.setState({
+              data: {"encrypted_aaa":encrypted_aaa, "encrypted_data":encrypted_data}
+            });
           }
           else {
-            console_log("data kosong, bikin baru");
+            console_log("data kosong, bikin baru (tapi password kesimpen)");
             this.setState({
               password: null,
               data: null
             });
           }
-        },
-        (tx, err) => {
-          console_log(err);
-        }
-      );
-    };
-    if (tx==null) {
-      db.transaction(proc);
-    }
-    else {
-      proc(tx);
-    }
+        });
+      }
+      else {
+        console_log("data kosong, bikin baru");
+        this.setState({
+          password: null,
+          data: null
+        });
+      }
+    });
   };
 
   dbNewData() {
+    ///password set but no data, generate and save in storage
     var encrypted_aaa = encrypt("aaa", this.state.password);
     var encrypted_data = encrypt("write data here", this.state.password);
-    
-    db.transaction((tx) => {
-      tx.executeSql(
-        'insert into data (encrypted_aaa, encrypted_data) values (?, ?)',
-        [
-          encrypted_aaa,
-          encrypted_data
-        ],
-        (tx, rs) => {
-          this.dbFetch(tx);
-        }
-      );
-      
+    AsyncStorage.setItem(db.encrypted_aaa, encrypted_aaa).then(() => {
+      AsyncStorage.setItem(db.encrypted_data, encrypted_data).then(()=>{
+        this.dbFetch();
+      });
     });
-
   };
+
   dbSaveData(dataString) {
     console_log("to encrypt: "+dataString);
     var encrypted_hexstring = encrypt(dataString, this.state.password);
     console_log("encrypted hexstring to save: "+encrypted_hexstring);
-
-    db.transaction((tx) => {
-      tx.executeSql(
-        'UPDATE data SET encrypted_data = ? where id = ?;',
-        [encrypted_hexstring, 1],
-        (tx,rs) => {
-          console_log("saved");
-        },
-        (tx, err) => {
-          console_log("saving error: "+err)
-        }
-      )
-    }
-    );
-  }
+    AsyncStorage.setItem(db.encrypted_data, encrypted_hexstring).then(()=>{
+      console_log("saved");
+    });
+  };
 
 };
 
@@ -422,7 +464,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: Expo.Constants.statusBarHeight,
+    paddingTop: topBarHeight,
   },
   roomPassword: {
     flex: 1,
@@ -450,18 +492,16 @@ const styles = StyleSheet.create({
   roomNote: {
     flex: 1,
     flexDirection: 'column',
-    paddingTop: Expo.Constants.statusBarHeight,
-    height: windowH-Expo.Constants.statusBarHeight,
+    paddingTop: topBarHeight,
     width: windowW,
-    backgroundColor: 'rgb(30,30,30)',
-    color: 'rgb(152,220,254)',
+    backgroundColor: 'rgb(230,230,230)',
   },
   roomNoteText: {
-    flex:5,
+    flex:  50,
     padding: 5,
   },
   roomNoteSave: {
-    flex: 1
+    // flex: 1
   },
   roomNoteSaveTouchable: {
     justifyContent: 'center',
